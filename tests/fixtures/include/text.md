@@ -5,7 +5,8 @@
 .. include:: ./not-exist.md
 
 .. include:: ./text.html
+   :encoding: utf-8
 
 .. include:: ./hello.md
 
-.. include:: ../toc.txt
+.. include:: ../directive_toc.txt

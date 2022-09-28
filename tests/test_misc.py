@@ -7,22 +7,24 @@ class TestMiscCases(TestCase):
         self.assertEqual(mistune.html(None), '')
 
     def test_before_parse_hooks(self):
-        def _add_name(md, s, state):
-            state['name'] = 'test'
-            return s, state
+        def _add_name(md, state):
+            state.env['name'] = 'test'
 
         md = mistune.create_markdown()
         md.before_parse_hooks.append(_add_name)
-        state = {}
+        state = md.block.state_cls()
         md.parse('', state)
-        self.assertEqual(state['name'], 'test')
+        self.assertEqual(state.env['name'], 'test')
 
     def test_hard_wrap(self):
-        renderer = mistune.HTMLRenderer()
-        inline = mistune.InlineParser(renderer, hard_wrap=True)
-        md = mistune.Markdown(renderer, inline=inline)
+        md = mistune.create_markdown(escape=False, hard_wrap=True)
         result = md('foo\nbar')
         expected = '<p>foo<br />\nbar</p>'
+        self.assertEqual(result.strip(), expected)
+
+        md = mistune.create_markdown(
+            escape=False, hard_wrap=True, plugins=['speedup'])
+        result = md('foo\nbar')
         self.assertEqual(result.strip(), expected)
 
     def test_escape_html(self):
@@ -33,12 +35,6 @@ class TestMiscCases(TestCase):
 
         result = md('<em>1</em>')
         expected = '<p>&lt;em&gt;1&lt;/em&gt;</p>'
-        self.assertEqual(result.strip(), expected)
-
-    def test_emphasis(self):
-        md = mistune.create_markdown(escape=True)
-        result = md('_em_ **strong**')
-        expected = '<p><em>em</em> <strong>strong</strong></p>'
         self.assertEqual(result.strip(), expected)
 
     def test_harmful_links(self):
@@ -61,6 +57,36 @@ class TestMiscCases(TestCase):
         self.assertEqual(result.strip(), expected)
 
     def test_use_plugin(self):
-        from mistune.plugins import plugin_url
+        from mistune.plugins.url import url
         md = mistune.Markdown(mistune.HTMLRenderer())
-        md.use(plugin_url)
+        md.use(url)
+
+    def test_markdown_func(self):
+        result = mistune.markdown('**b**')
+        expected = '<p><strong>b</strong></p>\n'
+        self.assertEqual(result, expected)
+
+        # trigger to use cached parser
+        result = mistune.markdown('**b**')
+        self.assertEqual(result, expected)
+
+    def test_ast_output(self):
+        md = mistune.create_markdown(escape=False, renderer=None)
+        text = '# h1\n\nfoo **bar**'
+        result = md(text)
+        expected = [
+            {
+                'type': 'heading',
+                'children': [{'type': 'text', 'raw': 'h1'}],
+                'attrs': {'level': 1},
+            },
+            {'type': 'blank_line'},
+            {
+                'type': 'paragraph',
+                'children': [
+                    {'type': 'text', 'raw': 'foo '},
+                    {'type': 'strong', 'children': [{'type': 'text', 'raw': 'bar'}]}
+                ]
+            },
+        ]
+        self.assertEqual(result, expected)

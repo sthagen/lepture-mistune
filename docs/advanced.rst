@@ -1,6 +1,5 @@
-Advanced Guide of Mistune
-=========================
-
+Advanced Guide
+==============
 
 .. _renderers:
 
@@ -25,45 +24,69 @@ Here is a a list of available renderer functions::
 
     # inline level
     text(self, text)
-    link(self, link, text=None, title=None)
-    image(self, src, alt="", title=None)
+    link(self, text, url, title=None)
+    image(self, alt, url, title=None)
     emphasis(self, text)
     strong(self, text)
     codespan(self, text)
     linebreak(self)
-    newline(self)
+    softbreak(self)
     inline_html(self, html)
 
     # block level
     paragraph(self, text)
-    heading(self, text, level)
-    heading(self, text, level, tid)  # when TOC directive is enabled
+    heading(self, text, level, **attrs)
+    blank_line(self)
     thematic_break(self)
     block_text(self, text)
     block_code(self, code, info=None)
     block_quote(self, text)
     block_html(self, html)
     block_error(self, html)
-    list(self, text, ordered, level, start=None)
-    list_item(self, text, level)
+    list(self, text, ordered, **attrs)
+    list_item(self, text, **attrs)
 
     # provided by strikethrough plugin
     strikethrough(self, text)
+
+    # provided by mark plugin
+    mark(self, text)
+
+    # provided by insert plugin
+    insert(self, text)
+
+    # provided by subscript plugin
+    subscript(self, text)
+
+    # provided by abbr plugin
+    abbr(self, text, title)
+
+    # provided by ruby plugin
+    ruby(self, text, rt)
+
+    # provided by task_lists plugin
+    task_list_item(self, text, checked=False, **attrs)
 
     # provide by table plugin
     table(self, text)
     table_head(self, text)
     table_body(self, text)
     table_row(self, text)
-    table_cell(self, text, align=None, is_head=False)
+    table_cell(self, text, align=None, head=False)
 
     # provided by footnotes plugin
     footnote_ref(self, key, index)
     footnotes(self, text)
     footnote_item(self, text, key, index)
 
-    # Finalize rendered content (define output)
-    finalize(self, data)
+    # provide by def_list plugin
+    def_list(self, text)
+    def_list_head(self, text)
+    def_list_item(self, text)
+
+    # provide by math plugin
+    block_math(self, text)
+    inline_math(self, text)
 
 
 .. _plugins:
@@ -71,46 +94,142 @@ Here is a a list of available renderer functions::
 Create plugins
 --------------
 
-Mistune has some built-in plugins, you can take a look at the source code
-in ``mistune/plugins`` to find out how to write a plugin. Let's take an
-example for GitHub Wiki links: ``[[Page 2|Page 2]]``.
+Mistune has many built-in plugins, you can take a look at the source code
+in ``mistune/plugins`` to find out how to write a plugin. In this documentation,
+I'll guide you with an example, let's take a look at the math plugin
+(located at ``mistune/plugins/math.py``):
 
-A mistune plugin usually looks like::
+.. code-block:: python
 
-    # define regex for Wiki links
-    WIKI_PATTERN = (
-        r'\[\['                   # [[
-        r'([\s\S]+?\|[\s\S]+?)'   # Page 2|Page 2
-        r'\]\](?!\])'             # ]]
+    def math(md):
+        md.block.register('block_math', BLOCK_MATH_PATTERN, parse_block_math, before='list')
+        md.inline.register('inline_math', INLINE_MATH_PATTERN, parse_inline_math, before='link')
+        if md.renderer and md.renderer.NAME == 'html':
+            md.renderer.register('block_math', render_block_math)
+            md.renderer.register('inline_math', render_inline_math)
+
+The parameter ``md`` is the instance of :class:`Markdown`. In our example, we have registered
+a block level math plugin and an inline level math plugin.
+
+Block level plugin
+~~~~~~~~~~~~~~~~~~
+
+Function ``md.block.register`` will register a block level plugin. In the math example:
+
+.. code-block:: text
+
+    $$
+    \operatorname{ker} f=\{g\in G:f(g)=e_{H}\}{\mbox{.}}
+    $$
+
+This is how a block level math syntax looks like. Our ``BLOCK_MATH_PATTERN`` is:
+
+.. code-block:: python
+
+    # block level pattern MUST startswith ^
+    BLOCK_MATH_PATTERN = r'^ {0,3}\$\$[ \t]*\n(?P<math_text>.+?)\n\$\$[ \t]*$'
+
+    # regex represents:
+    BLOCK_MATH_PATTERN = (
+      r'^ {0,3}'  # line can startswith 0~3 spaces just like other block elements defined in commonmark
+      r'\$\$'  # followed by $$
+      r'[ \t]*\n'  # this line can contain extra spaces and tabs
+      r'(?P<math_text>.+?)'  # this is the math content, MUST use named group
+      r'\n\$\$[ \t]*$'  # endswith $$ + extra spaces and tabs
     )
 
-    # define how to parse matched item
-    def parse_wiki(inline, m, state):
-        # ``inline`` is ``md.inline``, see below
-        # ``m`` is matched regex item
-        text = m.group(1)
-        title, link = text.split('|')
-        return 'wiki', link, title
+    # if you want to make the math pattern more strictly, it could be like:
+    BLOCK_MATH_PATTERN = r'^\$\$\n(?P<math_text>.+?)\n\$\$$'
 
-    # define how to render HTML
-    def render_html_wiki(link, title):
-        return f'<a href="{link}">{title}</a>'
+Then the block parsing function:
 
-    def plugin_wiki(md):
-        # this is an inline grammar, so we register wiki rule into md.inline
-        md.inline.register_rule('wiki', WIKI_PATTERN, parse_wiki)
+.. code-block:: python
 
-        # add wiki rule into active rules
-        md.inline.rules.append('wiki')
+    def parse_block_math(block, m, state):
+        text = m.group('math_text')
+        # use ``state.append_token`` to save parsed block math token
+        state.append_token({'type': 'block_math', 'raw': text})
+        # return the end position of parsed text
+        # since python doesn't count ``$``, we have to +1
+        # if the pattern is not ended with `$`, we can't +1
+        return m.end() + 1
 
-        # add HTML renderer
-        if md.renderer.NAME == 'html':
-            md.renderer.register('wiki', render_html_wiki)
+The ``token`` MUST contain ``type``, others are optional. Here are some examples:
 
-    # use this plugin
-    markdown = mistune.create_markdown(plugins=[plugin_wiki])
+.. code-block:: python
 
-Get more examples in ``mistune/plugins``.
+    {'type': 'thematic_break'}  # <hr>
+    {'type': 'paragraph', 'text': text}
+    {'type': 'block_code', 'raw': code}
+    {'type': 'heading', 'text': text, 'attrs': {'level': level}}
+
+- **text**: inline parser will parse text
+- **raw**: inline parser WILL NOT parse the content
+- **attrs**: extra information saved here, renderer will use attrs
+
+Inline level plugin
+~~~~~~~~~~~~~~~~~~~
+
+Function ``md.inline.register`` will register an inline level plugin. In the math example:
+
+.. code-block:: text
+
+    function $f$
+
+This is how an inline level math syntax looks like. Our ``INLINE_MATH_PATTERN`` is:
+
+.. code-block:: python
+
+    INLINE_MATH_PATTERN = r'\$(?!\s)(?P<math_text>.+?)(?!\s)\$'
+
+    # regex represents:
+    INLINE_MATH_PATTERN = (
+      r'\$'  # startswith $
+      r'(?!\s)'  # not whitespace
+      r'(?P<math_text>.+?)'  # content between `$`, MUST use named group
+      r'(?!\s)'  # not whitespace
+      r'\$'  # endswith $
+    )
+
+Then the inline parsing function:
+
+.. code-block:: python
+
+    def parse_inline_math(inline, m, state):
+        text = m.group('math_text')
+        # use ``state.append_token`` to save parsed inline math token
+        state.append_token({'type': 'inline_math', 'raw': text})
+        # return the end position of parsed text
+        return m.end()
+
+The inline token value looks the same with block token. Available keys:
+``type``, ``raw``, ``text``, ``attrs``.
+
+Plugin renderers
+~~~~~~~~~~~~~~~~
+
+It is suggested to add default HTML renderers for your plugin. A renderer function
+looks like:
+
+.. code-block:: python
+
+    def render_hr(renderer):
+        # token with only type, like:
+        # {'type': 'hr'}
+        return '<hr>'
+
+    def render_math(renderer, text):
+        # token with type and (text or raw), e.g.:
+        # {'type': 'block_math', 'raw': 'a^b'}
+        return '<div class="math">$$' + text + '$$</div>'
+
+    def render_link(renderer, text, **attrs):
+        # token with type, text or raw, and attrs
+        href = attrs['href']
+        return f'<a href="{href}">{text}</a>'
+
+If current markdown instance is using HTML renderer, developers can register
+the plugin renderer for converting markdown to HTML.
 
 .. _directives:
 
@@ -123,35 +242,23 @@ the directives part of the documentation. These are defined in the
 
 Let's try to write a "spoiler" directive, which takes a hint::
 
-    .. spoiler: SPOILER
-    
-        Spoilers in the information age are typically listed with a SPOILER! heading.
-
-
-
-The `Spoiler` directive::
-
-    from mistune.directives import Directive
-
+    from mistune.directives import Directive, parse_options
 
     class Spoiler(Directive):
         def parse(self, block, m, state):
-            options = self.parse_options(m)
             if options:
                 return {
                     'type': 'block_error',
                     'raw': 'Spoiler has no options'
                 }
-            hint = m.group('value')
-            text = self.parse_text(m)
 
-            rules = list(block.rules)
-            rules.remove('directive')
-            children = block.parse(text, state, rules)
+            hint = m.group('value')
+            attrs = {'hint': hint}
+            children = parse_children(block, m, state)
             return {
                 'type': 'spoiler',
                 'children': children,
-                'params': (hint,)
+                'attrs': attrs,
             }
 
         def __call__(self, md):
@@ -159,8 +266,6 @@ The `Spoiler` directive::
 
             if md.renderer.NAME == 'html':
                 md.renderer.register('spoiler', render_html_spoiler)
-            elif md.renderer.NAME == 'ast':
-                md.renderer.register('spoiler', render_ast_spoiler)
 
 
     def render_html_spoiler(text, name, hint="Spoiler"):
@@ -170,13 +275,6 @@ The `Spoiler` directive::
             html += '<div class="spoiler-text">' + text + '</div>\n'
         return html + '</section>\n'
 
-
-    def render_ast_spoiler(children, hint="Spoiler"):
-        return {
-            'type': 'spoiler',
-            'children': children,
-            'hint': hint,
-        }
 
 Some design functionalities would be required to make the
 HTML rendering actually output a spoiler block.
