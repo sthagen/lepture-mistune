@@ -1,3 +1,5 @@
+from typing import Optional
+from .core import BlockState
 from .block_parser import BlockParser
 from .inline_parser import InlineParser
 
@@ -40,7 +42,30 @@ class Markdown:
     def use(self, plugin):
         plugin(self)
 
-    def parse(self, s: str, state=None):
+    def render_tokens(self, state: BlockState):
+        data = self._iter_render(state.tokens, state, None)
+        if self.renderer:
+            return self.renderer(data)
+        return list(data)
+
+    def _iter_render(self, tokens, state, parent):
+        for tok in tokens:
+            if 'children' in tok:
+                data = self._iter_render(tok['children'], state, tok)
+                if self.renderer:
+                    children = self.renderer(data)
+                else:
+                    children = list(data)
+                tok['children'] = children
+            elif 'text' in tok:
+                text = tok.pop('text')
+                children = self.inline(text.strip(), state.env)
+                tok['children'] = children
+
+            self.block.iter_token_hook(tok, parent)
+            yield tok
+
+    def parse(self, s: str, state: Optional[BlockState]=None):
         """Parse and convert the given markdown string. If renderer is None,
         the returned **result** will be parsed markdown tokens.
 
@@ -65,7 +90,7 @@ class Markdown:
         for hook in self.before_render_hooks:
             hook(self, state)
 
-        result = self.block.render(state, self.inline)
+        result = self.render_tokens(state)
 
         for hook in self.after_render_hooks:
             result = hook(self, result, state)
@@ -82,7 +107,7 @@ class Markdown:
         s = s.decode(encoding)
         return self.parse(s, state)
 
-    def __call__(self, s):
+    def __call__(self, s: str):
         if s is None:
             s = '\n'
         return self.parse(s)[0]
