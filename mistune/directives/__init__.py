@@ -1,13 +1,18 @@
-from .base import Directive, parse_options, parse_children
+from ._base import DirectiveParser, BaseDirective, DirectivePlugin
+from ._rst import RstDirective
+from ._fenced import FencedDirective
 from .admonition import Admonition
-from .toc import DirectiveToc
-from .include import DirectiveInclude
+from .toc import TableOfContents
+from .include import Include
 
 
 __all__ = [
-    'parse_options', 'parse_children',
-    'Directive',
+    'DirectiveParser',
+    'BaseDirective',
+    'DirectivePlugin',
+    'RstDirective',
+    'FencedDirective',
     'Admonition',
-    'DirectiveToc',
-    'DirectiveInclude',
+    'TableOfContents',
+    'Include',
 ]

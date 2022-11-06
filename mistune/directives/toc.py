@@ -5,52 +5,51 @@
     The TOC directive syntax looks like::
 
         .. toc:: Title
-           :level: 3
+           :min-level: 1
+           :max-level: 3
 
-    "Title" and "level" option can be empty. "level" is an integer less
-    than 6, which defines the max heading level writers want to include
-    in TOC.
+    "Title", "min-level", and "max-level" option can be empty. "min-level"
+    and "max-level" are integers >= 1 and <= 6, which define the allowed
+    heading levels writers want to include in the table of contents.
 """
 
-from .base import Directive, parse_options
+from ._base import DirectivePlugin
 from ..toc import normalize_toc_item, render_toc_ul
 
 
-class DirectiveToc(Directive):
-    def __init__(self, level=3, heading_id=None):
-        self.level = level
+class TableOfContents(DirectivePlugin):
+    def __init__(self, min_level=1, max_level=3):
+        self.min_level = min_level
+        self.max_level = max_level
 
-        if callable(heading_id):
-            self.heading_id = heading_id
-        else:
-            def heading_id(token, index):
-                return 'toc_' + str(index + 1)
-            self.heading_id = heading_id
+    def generate_heading_id(self, token, index):
+        return 'toc_' + str(index + 1)
 
     def parse(self, block, m, state):
-        title = m.group('value')
-        level = None
-        collapse = False
-        options = parse_options(m)
+        title = self.parse_title(m)
+        options = self.parse_options(m)
         if options:
             d_options = dict(options)
             collapse = 'collapse' in d_options
-            level = d_options.get('level')
-            if level:
-                try:
-                    level = int(level)
-                except (ValueError, TypeError):
-                    return {
-                        'type': 'block_error',
-                        'raw': 'TOC level MUST be integer',
-                    }
+            min_level = _normalize_level(d_options, 'min-level', self.min_level)
+            max_level = _normalize_level(d_options, 'max-level', self.max_level)
+            if min_level < self.min_level:
+                raise ValueError(f'"min-level" option MUST be >= {self.min_level}')
+            if max_level > self.max_level:
+                raise ValueError(f'"max-level" option MUST be <= {self.max_level}')
+            if min_level > max_level:
+                raise ValueError('"min-level" option MUST be less than "max-level" option')
+        else:
+            collapse = False
+            min_level = self.min_level
+            max_level = self.max_level
 
-        if level is None:
-            level = self.level
-        elif level < 1 or level > 6:
-            level = self.level
-
-        attrs = {'title': title, 'level': level, 'collapse': collapse}
+        attrs = {
+            'title': title,
+            'min_level': min_level,
+            'max_level': max_level,
+            'collapse': collapse,
+        }
         return {'type': 'toc', 'raw': '', 'attrs': attrs}
 
     def toc_hook(self, md, state):
@@ -67,23 +66,24 @@ class DirectiveToc(Directive):
             toc_items = []
             # adding ID for each heading
             for i, tok in enumerate(headings):
-                tok['attrs']['id'] = self.heading_id(tok, i)
+                tok['attrs']['id'] = self.generate_heading_id(tok, i)
                 toc_items.append(normalize_toc_item(md, tok))
 
             for sec in sections:
-                level = sec['attrs']['level']
-                toc = [item for item in toc_items if item[0] <= level]
+                _min = sec['attrs']['min_level']
+                _max = sec['attrs']['max_level']
+                toc = [item for item in toc_items if _min <= item[0] <= _max]
                 sec['raw'] = render_toc_ul(toc)
 
-    def __call__(self, md):
+    def __call__(self, directive, md):
         if md.renderer and md.renderer.NAME == 'html':
             # only works with HTML renderer
-            self.register_directive(md, 'toc')
+            directive.register('toc', self.parse)
             md.before_render_hooks.append(self.toc_hook)
             md.renderer.register('toc', render_html_toc)
 
 
-def render_html_toc(renderer, text, title, level, collapse=False):
+def render_html_toc(renderer, text, title, collapse=False, **attrs):
     if not title:
         title = 'Table of Contents'
 
@@ -92,3 +92,13 @@ def render_html_toc(renderer, text, title, level, collapse=False):
         html += ' open'
     html += '>\n<summary>' + title + '</summary>\n'
     return html + text + '</details>\n'
+
+
+def _normalize_level(options, name, default):
+    level = options.get(name)
+    if not level:
+        return default
+    try:
+        return int(level)
+    except (ValueError, TypeError):
+        raise ValueError(f'"{name}" option MUST be integer')
