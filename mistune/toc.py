@@ -28,9 +28,10 @@ def add_toc_hook(md, min_level=1, max_level=3, heading_id=None):
         headings = []
 
         for tok in state.tokens:
-            level = tok['attrs']['level']
-            if tok['type'] == 'heading' and min_level <= level <= max_level:
-                headings.append(tok)
+            if tok['type'] == 'heading':
+                level = tok['attrs']['level']
+                if min_level <= level <= max_level:
+                    headings.append(tok)
 
         toc_items = []
         for i, tok in enumerate(headings):
@@ -45,7 +46,8 @@ def add_toc_hook(md, min_level=1, max_level=3, heading_id=None):
 
 def normalize_toc_item(md, token):
     text = token['text']
-    html = md.inline(text, {})
+    tokens = md.inline(text, {})
+    html = md.renderer(tokens, {})
     text = striptags(html)
     attrs = token['attrs']
     return attrs['level'], attrs['id'], text

@@ -46,7 +46,7 @@ def _parse_ruby_link(inline, state, pos, tokens):
         if link_pos:
             state.append_token({
                 'type': 'link',
-                'children': inline.render_tokens(tokens),
+                'children': tokens,
                 'attrs': attrs,
             })
             return link_pos
@@ -57,11 +57,12 @@ def _parse_ruby_link(inline, state, pos, tokens):
         if label and link_pos:
             ref_links = state.env['ref_links']
             key = unikey(label)
-            attrs = ref_links.get(key)
-            if attrs:
+            env = ref_links.get(key)
+            if env:
+                attrs = {'url': env['url'], 'title': env.get('title')}
                 state.append_token({
                     'type': 'link',
-                    'children': inline.render_tokens(tokens),
+                    'children': tokens,
                     'attrs': attrs,
                 })
             else:

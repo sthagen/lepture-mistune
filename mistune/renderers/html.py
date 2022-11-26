@@ -1,5 +1,5 @@
-from .core import BaseRenderer
-from .util import escape as escape_text, striptags, safe_entity
+from ..core import BaseRenderer
+from ..util import escape as escape_text, striptags, safe_entity
 
 
 class HTMLRenderer(BaseRenderer):
@@ -22,6 +22,34 @@ class HTMLRenderer(BaseRenderer):
         super(HTMLRenderer, self).__init__()
         self._allow_harmful_protocols = allow_harmful_protocols
         self._escape = escape
+
+    def render_token(self, token, state):
+        # backward compitable with v2
+        func = self._get_method(token['type'])
+        attrs = token.get('attrs')
+
+        if 'title' in token:
+            title = self.render_tokens(token['title'], state)
+            if attrs:
+                _attrs = {'title': title}
+                _attrs.update(attrs)
+                attrs = _attrs
+            else:
+                attrs = {'title': title}
+
+        if 'raw' in token:
+            text = token['raw']
+        elif 'children' in token:
+            text = self.render_tokens(token['children'], state)
+        else:
+            if attrs:
+                return func(**attrs)
+            else:
+                return func()
+        if attrs:
+            return func(text, **attrs)
+        else:
+            return func(text)
 
     def safe_url(self, url: str) -> str:
         """Ensure the given URL is safe. This method is used for rendering
@@ -128,5 +156,5 @@ class HTMLRenderer(BaseRenderer):
             return html + '>\n' + text + '</ol>\n'
         return '<ul>\n' + text + '</ul>\n'
 
-    def list_item(self, text: str, **attrs) -> str:
+    def list_item(self, text: str) -> str:
         return '<li>' + text + '</li>\n'

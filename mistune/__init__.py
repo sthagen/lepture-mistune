@@ -12,7 +12,7 @@ from .markdown import Markdown
 from .core import BlockState, InlineState, BaseRenderer
 from .block_parser import BlockParser
 from .inline_parser import InlineParser
-from .html_renderer import HTMLRenderer
+from .renderers.html import HTMLRenderer
 from .util import escape, escape_url, safe_entity, unikey
 from .plugins import import_plugin
 
@@ -37,10 +37,10 @@ def create_markdown(escape=True, hard_wrap=False, renderer='html', plugins=None)
     if renderer == 'html':
         renderer = HTMLRenderer(escape=escape)
 
-    inline = InlineParser(renderer, hard_wrap=hard_wrap)
+    inline = InlineParser(hard_wrap=hard_wrap)
     if plugins is not None:
         plugins = [import_plugin(n) for n in plugins]
-    return Markdown(inline=inline, plugins=plugins)
+    return Markdown(renderer=renderer, inline=inline, plugins=plugins)
 
 
 html = create_markdown(
@@ -71,5 +71,5 @@ __all__ = [
     'html', 'create_markdown', 'markdown',
 ]
 
-__version__ = '3.0.0rc2'
+__version__ = '3.0.0rc3'
 __homepage__ = 'https://mistune.lepture.com/'

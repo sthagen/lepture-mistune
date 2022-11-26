@@ -18,7 +18,7 @@ from .helpers import (
     parse_link_href,
     parse_link_title,
 )
-from .list_parser import parse_list
+from .list_parser import parse_list, LIST_PATTERN
 
 _INDENT_CODE_TRIM = re.compile(r'^ {1,4}', flags=re.M)
 _AXT_HEADING_TRIM = re.compile(r'(\s+|^)#+\s*$')
@@ -70,11 +70,7 @@ class BlockParser(Parser):
         'thematic_break': r'^ {0,3}((?:-[ \t]*){3,}|(?:_[ \t]*){3,}|(?:\*[ \t]*){3,})$',
         'ref_link': r'^ {0,3}\[(?P<reflink_1>' + LINK_LABEL + r')\]:',
         'block_quote': r'^ {0,3}>(?P<quote_1>.*?)$',
-        'list': (
-            r'^(?P<list_1> {0,3})'
-            r'(?P<list_2>[\*\+-]|\d{1,9}[.)])'
-            r'(?P<list_3>[ \t]*|[ \t].+)$'
-        ),
+        'list': LIST_PATTERN,
         'block_html': BLOCK_HTML,
         'raw_html': RAW_HTML,
     }
@@ -136,7 +132,7 @@ class BlockParser(Parser):
         code = expand_leading_tab(code)
         code = _INDENT_CODE_TRIM.sub('', code)
         code = code.strip('\n')
-        state.append_token({'type': 'block_code', 'raw': code})
+        state.append_token({'type': 'block_code', 'raw': code, 'style': 'indent'})
         return m.end()
 
     def parse_fenced_code(self, m: re.Match, state: BlockState) -> Optional[int]:
@@ -179,7 +175,7 @@ class BlockParser(Parser):
             _trim_pattern = re.compile('^ {0,' + str(len(spaces)) + '}', re.M)
             code = _trim_pattern.sub('', code)
 
-        token = {'type': 'block_code', 'raw': code, 'fenced': True}
+        token = {'type': 'block_code', 'raw': code, 'style': 'fenced', 'marker': marker}
         if info:
             info = unescape_char(info)
             token['attrs'] = {'info': safe_entity(info.strip())}
@@ -196,7 +192,7 @@ class BlockParser(Parser):
         if text:
             text = _AXT_HEADING_TRIM.sub('', text)
 
-        token = {'type': 'heading', 'text': text, 'attrs': {'level': level}}
+        token = {'type': 'heading', 'text': text, 'attrs': {'level': level}, 'style': 'axt'}
         state.append_token(token)
         return m.end() + 1
 
@@ -212,6 +208,7 @@ class BlockParser(Parser):
         if last_token and last_token['type'] == 'paragraph':
             level = 1 if m.group('setext_1') == '=' else 2
             last_token['type'] = 'heading'
+            last_token['style'] = 'setext'
             last_token['attrs'] = {'level': level}
             return m.end() + 1
 
@@ -242,7 +239,8 @@ class BlockParser(Parser):
         if end_pos:
             return end_pos
 
-        key = unikey(m.group('reflink_1'))
+        label = m.group('reflink_1')
+        key = unikey(label)
         if not key:
             return
 
@@ -279,10 +277,10 @@ class BlockParser(Parser):
 
         if key not in state.env['ref_links']:
             href = unescape_char(href)
-            attrs = {'url': escape_url(href)}
+            data = {'url': escape_url(href), 'label': label}
             if title:
-                attrs['title'] = safe_entity(title)
-            state.env['ref_links'][key] = attrs
+                data['title'] = safe_entity(title)
+            state.env['ref_links'][key] = data
         return end_pos
 
     def extract_block_quote(self, m: re.Match, state: BlockState) -> Tuple[str, int]:
@@ -379,41 +377,7 @@ class BlockParser(Parser):
 
     def parse_list(self, m: re.Match, state: BlockState) -> int:
         """Parse tokens for ordered and unordered list."""
-        text = m.group('list_3')
-        if not text.strip():
-            # Example 285
-            # an empty list item cannot interrupt a paragraph
-            end_pos = state.append_paragraph()
-            if end_pos:
-                return end_pos
-
-        marker = m.group('list_2')
-        ordered = len(marker) > 1
-        attrs = {'ordered': ordered, 'tight': True}
-        if ordered:
-            start = int(marker[:-1])
-            if start != 1:
-                # Example 304
-                # we allow only lists starting with 1 to interrupt paragraphs
-                end_pos = state.append_paragraph()
-                if end_pos:
-                    return end_pos
-                attrs['start'] = start
-
-        state.cursor = m.end() + 1
-        groups = (m.group('list_1'), marker, text)
-        token = parse_list(self, attrs, groups, state)
-        # add attrs to list item token
-        for tok in token['children']:
-            tok['attrs'] = {'depth': attrs['depth'], 'tight': attrs['tight']}
-
-        end_pos = token.pop('_end_pos', None)
-        if end_pos:
-            state.prepend_token(token)
-            return end_pos
-
-        state.append_token(token)
-        return state.cursor
+        return parse_list(self, m, state)
 
     def parse_block_html(self, m: re.Match, state: BlockState) -> Optional[int]:
         return self.parse_raw_html(m, state)
@@ -465,12 +429,6 @@ class BlockParser(Parser):
         if (open_tag and _OPEN_TAG_END.match(state.src, start_pos, end_pos)) or \
            (close_tag and _CLOSE_TAG_END.match(state.src, start_pos, end_pos)):
             return _parse_html_to_newline(state, self.BLANK_LINE)
-
-    def iter_token_hook(self, token: Dict[str, Any], parent: Optional[Dict[str, Any]]):
-        if token['type'] == 'paragraph' and parent:
-            attrs = parent.get('attrs')
-            if attrs and attrs.get('tight'):
-                token['type'] = 'block_text'
 
     def parse(self, state: BlockState, rules: Optional[List[str]]=None) -> None:
         sc = self.compile_sc(rules)
