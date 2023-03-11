@@ -1,5 +1,5 @@
 <a href="https://github.com/lepture/mistune">
-<img align="right" width="120" height="120" src="docs/_static/logo.svg">
+<img align="right" width="120" height="120" src="docs/_static/light-logo.svg">
 </a>
 
 # Mistune v3
@@ -16,6 +16,11 @@ Looking for old Mistune? Switch branch to:
 
 - v1
 - v2
+
+## Paid plugins
+
+You can ask me to create a custom mistune plugin or directive for your needs with GitHub sponsor
+[one time tier (Mistune enhance)](https://github.com/sponsors/lepture/sponsorships?tier_id=220664)
 
 ## Sponsors
 
