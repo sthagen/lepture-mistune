@@ -70,6 +70,8 @@ class Markdown:
         # normalize line separator
         s = s.replace('\r\n', '\n')
         s = s.replace('\r', '\n')
+        if not s.endswith('\n'):
+            s += '\n'
 
         state.process(s)
 
