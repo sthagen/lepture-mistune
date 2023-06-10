@@ -8,7 +8,7 @@ Here are the list of API reference; it might be helpful for developers.
 Basic
 -----
 
-.. function:: html(text)
+.. function:: html(text: str)
 
     :param text: markdown formatted text
 
@@ -104,6 +104,21 @@ Plugins
 .. module:: mistune.plugins.spoiler
 
 .. autofunction:: spoiler
+
+Renderers
+---------
+
+.. module:: mistune.renderers.html
+
+.. autoclass:: HTMLRenderer
+
+.. module:: mistune.renderers.markdown
+
+.. autoclass:: MarkdownRenderer
+
+.. module:: mistune.renderers.rst
+
+.. autoclass:: RSTRenderer
 
 TOC hook
 --------

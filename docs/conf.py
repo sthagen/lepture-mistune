@@ -16,7 +16,14 @@ release = version
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = ['sphinx.ext.autodoc']
+extensions = [
+    'sphinx.ext.autodoc',
+    'sphinx.ext.intersphinx',
+]
+
+intersphinx_mapping = {
+    "python": ("https://docs.python.org/3", None),
+}
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -34,13 +41,37 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 #
 html_theme = 'shibuya'
 html_theme_options = {
-    "light_logo": "_static/light-logo.svg",
-    "dark_logo": "_static/dark-logo.svg",
+    "light_logo": "_static/logo-black.svg",
+    "dark_logo": "_static/logo-white.svg",
+
+    "light_css_variables": {
+        "--sy-rc-theme": "143, 118, 214",
+    },
+    "dark_css_variables": {
+        "--sy-rc-theme": "130, 80, 223",
+    },
+
     'twitter_site': 'lepture',
     'twitter_creator': 'lepture',
     'twitter_url': 'https://twitter.com/lepture',
     'github_url': 'https://github.com/lepture/mistune',
+
     'nav_links': [
+        {
+            'title': 'Projects',
+            'children': [
+                {
+                    'title': 'Authlib',
+                    'url': 'https://authlib.org/',
+                    'summary': 'OAuth, JOSE, OpenID, etc'
+                },
+                {
+                    'title': 'Shibuya',
+                    'url': 'https://shibuya.lepture.com/',
+                    'summary': 'A pretty Sphinx theme',
+                }
+            ]
+        },
         {'title': 'Sponsor me', 'url': 'https://github.com/sponsors/lepture'}
     ]
 }
@@ -54,12 +85,3 @@ html_copy_source = False
 html_show_sourcelink = False
 
 html_favicon = "_static/light-icon.svg"
-html_sidebars = {
-    "**": [
-        "sidebars/localtoc.html",
-        "sidebars/repo-stats.html",
-        "sidebars/edit-this-page.html",
-        "sponsors.html",
-        "sidebars/ethical-ads.html",
-    ]
-}
