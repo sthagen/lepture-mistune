@@ -13,7 +13,7 @@ LIST_PATTERN = (
     r'(?P<list_3>[ \t]*|[ \t].+)$'
 )
 
-_LINE_HAS_TEXT = re.compile(r'( *)\S')
+_LINE_HAS_TEXT = re.compile(r'(\s*)\S')
 
 
 def parse_list(block, m: re.Match, state: BlockState) -> int:
@@ -93,7 +93,7 @@ def _parse_list_item(block, bullet, groups, token, state, rules):
     pairs = [
         ('thematic_break', block.specification['thematic_break']),
         ('fenced_code', block.specification['fenced_code']),
-        ('axt_heading', block.specification['axt_heading']),
+        ('atx_heading', block.specification['atx_heading']),
         ('block_quote', block.specification['block_quote']),
         ('block_html', block.specification['block_html']),
         ('list', block.specification['list']),
