@@ -1,5 +1,4 @@
 import re
-from collections.abc import Generator
 from typing import (
     Any,
     Callable,
@@ -12,13 +11,15 @@ from typing import (
     MutableMapping,
     Optional,
     Pattern,
-    Set,
     Type,
     TypeVar,
     Union,
     cast,
 )
-from typing_extensions import Self
+try:
+    from typing import Self
+except ImportError:
+    from typing_extensions import Self
 
 _LINE_END = re.compile(r'\n|$')
 

@@ -8,10 +8,7 @@
     Documentation: https://mistune.lepture.com/
 """
 
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
-
-from typing_extensions import Literal
-
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union, Literal
 from .block_parser import BlockParser
 from .core import BaseRenderer, BlockState, InlineState
 from .inline_parser import InlineParser
