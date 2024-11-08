@@ -53,17 +53,17 @@ class HTMLRenderer(BaseRenderer):
         links, images, and etc.
         """
         if self._allow_harmful_protocols is True:
-            return url
+            return escape_text(url)
 
         _url = url.lower()
         if self._allow_harmful_protocols and \
             _url.startswith(tuple(self._allow_harmful_protocols)):
-            return url
+            return escape_text(url)
 
         if _url.startswith(self.HARMFUL_PROTOCOLS) and \
             not _url.startswith(self.GOOD_DATA_PROTOCOLS):
             return '#harmful-link'
-        return url
+        return escape_text(url)
 
     def text(self, text: str) -> str:
         if self._escape:
@@ -91,7 +91,7 @@ class HTMLRenderer(BaseRenderer):
         return s + ' />'
 
     def codespan(self, text: str) -> str:
-        return '<code>' + text + '</code>'
+        return '<code>' + escape_text(text) + '</code>'
 
     def linebreak(self) -> str:
         return '<br />\n'

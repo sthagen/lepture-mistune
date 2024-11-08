@@ -77,7 +77,7 @@ class TestMiscCases(TestCase):
 
     def test_ast_output(self):
         md = mistune.create_markdown(escape=False, renderer=None)
-        text = '# h1\n\nfoo **bar**'
+        text = '# h1\n\nfoo **bar**\n\n`&<>"`'
         result = md(text)
         expected = [
             {
@@ -94,9 +94,35 @@ class TestMiscCases(TestCase):
                     {'type': 'strong', 'children': [{'type': 'text', 'raw': 'bar'}]}
                 ]
             },
+            {'type': 'blank_line'},
+            {
+                'type': 'paragraph',
+                'children': [
+                    {'type': 'codespan', 'raw': '&<>"'},
+                ]
+            },
         ]
         self.assertEqual(result, expected)
 
+    def test_ast_url(self):
+        md = mistune.create_markdown(escape=False, renderer=None)
+        label = 'hi &<>"'
+        url = 'https://example.com/foo?a=1&b=2'
+        text = '[{}]({})'.format(label, url)
+        result = md(text)
+        expected = [
+            {
+                'type': 'paragraph',
+                'children': [
+                    {
+                        'type': 'link',
+                        'children': [{'type': 'text', 'raw': label}],
+                        'attrs': {'url': url},
+                    },
+                ],
+            },
+        ]
+        self.assertEqual(result, expected)
 
     def test_emsp(self):
         md = mistune.create_markdown(escape=False, hard_wrap=True)
