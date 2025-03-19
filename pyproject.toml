@@ -22,6 +22,8 @@ classifiers = [
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: Implementation :: CPython",
   "Programming Language :: Python :: Implementation :: PyPy",
   "Topic :: Text Processing :: Markup",
@@ -36,6 +38,20 @@ Donate = "https://github.com/sponsors/lepture"
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
+[dependency-groups]
+dev = [
+    "mypy",
+    "pytest",
+    "pytest-cov",
+    "ruff",
+]
+docs = [
+    "shibuya",
+    "sphinx",
+    "sphinx-copybutton",
+    "sphinx-design",
+]
+
 [tool.setuptools.dynamic]
 version = {attr = "mistune.__version__"}
 
@@ -44,13 +60,6 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 mistune = ["py.typed"]
-
-[tool.rye]
-managed = true
-dev-dependencies = [
-    "pytest",
-    "mypy",
-]
 
 [tool.ruff]
 line-length = 120
