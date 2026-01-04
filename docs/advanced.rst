@@ -234,8 +234,8 @@ Block elements
     #
     # when a list is tight (i.e., there is no blank line between any list
     # items or their children), and if a leaf list item contains only a
-    # paragraph, that paragraph's 'type' is changed to 'block_text' ('text'
-    # remains the same).
+    # paragraph, that paragraph's 'type' is changed to 'block_text'
+    # ('children' remains the same).
     #
     # block_texts are immediately put between <li>...</li>, where paragraphs
     # (occurring in 'loose' lists) are rendered like <li><p>...</p></li>.
