@@ -209,17 +209,39 @@ Inline elements
     { 'type': 'codespan', 'raw': str }
     { 'type': 'inline_html', 'raw': str }
 
-    # children contains elements inside square brackets
+    # links and images
     #
-    # 'attrs' contains items like 'url', 'title', etc.
+    # 'children' contains elements in the link text section. If you
+    # write something like [**text**](url), **text** goes to 'children'.
+    # This behavior is identical for both images and links, but the HTML
+    # renderer extracts only the text part of children when actually
+    # putting it into 'alt' attribute (e.g., ![**text**](url) returns
+    # <img src="url" alt="text">, not <img src="url" alt="**text**">)
     #
-    # for reference links and images (like [label][ref], ![label][ref]),
-    # 'ref' and 'label' are also given inside 'attrs'. The 'ref' in
-    # 'attrs' is always capitalized to uppercase letters, but the case
-    # for 'label' is preserved.
+    # for reference links and images (like [text][label], [label], etc.),
+    # 'ref' and 'label' are also given. Both contain the same content,
+    # but 'ref' is an uppercase version, while 'label' is case-sensitive.
     #
-    { 'type': 'image', 'children': list[dict], 'attrs': dict }
-    { 'type': 'link', 'children': list[dict], 'attrs': dict }
+    {
+        'type': 'image',
+        'children': list[dict],    # link text
+        'attrs': {
+            'url': str,
+            'title': str | None    # is None if not given
+        },
+        'ref': str,     # omitted if not reference links and images
+        'label': str    # omitted if not reference links and images
+    }
+    {
+        'type': 'link',
+        'children': list[dict],    # link text
+        'attrs': {
+            'url': str,
+            'title': str | None    # is None if not given
+        },
+        'ref': str,     # omitted if not reference links and images
+        'label': str    # omitted if not reference links and images
+    }
 
 Block elements
 ~~~~~~~~~~~~~~
