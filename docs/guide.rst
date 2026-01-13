@@ -83,6 +83,8 @@ In this way, we can use Pygments to highlight the fenced code. Learn more
 at :ref:`renderers`.
 
 
+.. _abstract-syntax-tree:
+
 Abstract syntax tree
 --------------------
 
@@ -108,3 +110,5 @@ This ``markdown`` function will generate a list of tokens instead of HTML::
 It is also possible to pass ``renderer='ast'`` to create the markdown instance::
 
     markdown = mistune.create_markdown(renderer='ast')
+
+For details on how to parse these tokens, see :ref:`parsing-ast-tokens`.

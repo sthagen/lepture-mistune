@@ -150,3 +150,265 @@ Mistune has some built-in directives that have been presented in
 the directives part of the documentation. These are defined in the
 ``mistune/directives``, you can learn how to write a new directive
 by reading the source code in ``mistune/directives/``.
+
+
+.. _parsing-ast-tokens:
+
+Parsing AST tokens
+------------------
+
+Mistune provides direct access to AST tokens by creating a markdown object
+via ``mistune.create_markdown(renderer='ast')`` (see :ref:`abstract-syntax-tree`).
+By walking down the AST returned from the markdown object, you can integrate
+Mistune's parser into other systems.
+
+.. code-block:: python
+
+    import mistune
+
+    markdown = mistune.create_markdown(renderer='ast')
+
+    tokens = markdown(
+    '''# Title
+
+    Subtitle
+    --------
+
+    Hello World!'''
+    )
+
+    stk = list(reversed(tokens))
+    while stk:
+        token = stk.pop()
+        print({k:v for k, v in token.items() if k != 'children'})
+        if 'children' in token:
+            for child in reversed(token['children']):
+                stk.append(child)
+
+Below is the documentation for the list of tokens that can occur in
+``renderer='ast'`` mode.
+
+Token structure
+~~~~~~~~~~~~~~~
+
+An AST token is a ``dict`` containing an item whose key is ``'type'`` and value
+is a string representing the token type (such as ``'text'``, ``'emphasis'``,
+``'strong'``). If the token has children, they are represented as a
+``list`` under the ``'children'`` key.
+
+Inline elements
+~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+    { 'type': 'linebreak' }
+    { 'type': 'softbreak' }
+    { 'type': 'text', 'raw': str }
+    { 'type': 'emphasis', 'children': list[dict] }
+    { 'type': 'strong', 'children': list[dict] }
+    { 'type': 'codespan', 'raw': str }
+    { 'type': 'inline_html', 'raw': str }
+
+    # links and images
+    #
+    # 'children' contains elements in the link text section. If you
+    # write something like [**text**](url), **text** goes to 'children'.
+    # This behavior is identical for both images and links, but the HTML
+    # renderer extracts only the text part of children when actually
+    # putting it into 'alt' attribute (e.g., ![**text**](url) returns
+    # <img src="url" alt="text">, not <img src="url" alt="**text**">)
+    #
+    # for reference links and images (like [text][label], [label], etc.),
+    # 'ref' and 'label' are also given. Both contain the same content,
+    # but 'ref' is an uppercase version, while 'label' is case-sensitive.
+    #
+    {
+        'type': 'image',
+        'children': list[dict],    # link text
+        'attrs': {
+            'url': str,
+            'title': str | None    # is None if not given
+        },
+        'ref': str,     # omitted if not reference links and images
+        'label': str    # omitted if not reference links and images
+    }
+    {
+        'type': 'link',
+        'children': list[dict],    # link text
+        'attrs': {
+            'url': str,
+            'title': str | None    # is None if not given
+        },
+        'ref': str,     # omitted if not reference links and images
+        'label': str    # omitted if not reference links and images
+    }
+
+Block elements
+~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+    { 'type': 'blank_line' }
+    { 'type': 'thematic_break' }
+    { 'type': 'paragraph', 'children': list[dict] }
+
+    # 'block_text' is a special text block that occurs in 'tight' lists.
+    #
+    # when a list is tight (i.e., there is no blank line between any list
+    # items or their children), and if a leaf list item contains only a
+    # paragraph, that paragraph's 'type' is changed to 'block_text'
+    # ('children' remains the same).
+    #
+    # block_texts are immediately put between <li>...</li>, where paragraphs
+    # (occurring in 'loose' lists) are rendered like <li><p>...</p></li>.
+    #
+    { 'type': 'block_text', 'children': list[dict] }
+
+    # 'style' can be 'atx' or 'setext'
+    {
+        'type': 'heading',
+        'children': list[dict],
+        'attrs': {'level': int},
+        'style': str
+    }
+
+    { 'type': 'block_quote', 'children': list[dict] }
+    { 'type': 'block_html', 'raw': str }
+    { 'type': 'block_code', 'raw': str, 'style': 'indent' }
+
+    # fenced block code
+    {
+        'type': 'block_code',
+        'raw': str,
+        'style': 'fenced',
+        'marker': str,
+        'attrs': {'info': str}    # appears if info string is given
+    }
+
+List elements
+~~~~~~~~~~~~~
+
+.. code-block:: python
+
+    {
+        'type': 'list',
+        'children': [{'type': 'list_item', 'children': list[dict]}, ...],
+        'tight': bool,    # whether the list is 'tight' or 'loose'
+        'bullet': str,    # list marker character
+        'attrs': {
+            'depth': int,
+            'ordered': bool,    # whether the list is ordered or unordered
+            'start': int    # appears if the list is ordered and start != 1
+        }
+    }
+
+Plugin elements
+~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+    # strikethrough, mark, insert, superscript, and subscript plugin
+    { 'type': 'strikethrough', 'children': list[dict] }
+    { 'type': 'mark', 'children': list[dict] }
+    { 'type': 'insert', 'children': list[dict] }
+    { 'type': 'superscript', 'children': list[dict] }
+    { 'type': 'subscript', 'children': list[dict] }
+
+    # footnotes plugin
+    { 'type': 'footnote_ref', 'raw': str, 'attrs': {'index': int} }
+    {
+        'type': 'footnotes',
+        'children': [
+            {
+                'type': 'footnote_item',
+                'children': [{'type': 'paragraph', 'children': list[dict]}],
+                'attrs': {'key': str, 'index': int}
+            },
+            ...
+        ]
+    }
+
+    # table plugin
+    {
+        'type': 'table',
+        'children': [
+            {
+                'type': 'table_head',
+                'children': [
+                    {
+                        'type': 'table_cell',
+                        'children': list[dict],
+                        'attrs': {
+                            # 'align' is 'center', 'left', 'right', or None
+                            'align': str | None,
+                            'head': True
+                        }
+                    },
+                    ...
+                ]
+            },
+            {
+                'type': 'table_body',
+                'children': {
+                    'type': 'table_row',
+                    'children': [
+                        {
+                            'type': 'table_cell',
+                            'children': list[dict],
+                            'attrs': {
+                                # 'align' is 'center', 'left', 'right', or None
+                                'align': str | None,
+                                'head': False
+                            }
+                        },
+                        ...
+                    ]
+                }
+            }
+        ]
+    }
+
+    # url plugin does not add new elements
+    # (it uses 'link' element just like normal links)
+
+    # task_lists plugin
+    #
+    # task_list_item appears in the same contexts as list_item.
+    #
+    {
+        'type': 'task_list_item',
+        'children': list[dict],
+        'attrs': {'checked': bool}
+    }
+
+    # def_list plugin
+    #
+    # similar to regular lists, sole paragraphs in def_list_items are
+    # converted to 'block_texts' if the definition list is tight.
+    #
+    {
+        'type': 'def_list',
+        'children': [
+            { 'type': 'def_list_head', 'children': list[dict] },
+            { 'type': 'def_list_item', 'children': list[dict] },
+            ...
+        ]
+    }
+
+    # abbr plugin
+    {
+        'type': 'abbr',
+        'children': [{'type': 'text', 'raw': str}],
+        'attrs': {'title': str}
+    }
+
+    # math plugin
+    { 'type': 'block_math', 'raw': str }
+    { 'type': 'inline_math', 'raw': str }
+
+    # ruby plugin
+    { 'type': 'ruby', 'raw': str, 'attrs': {'rt': str} }
+
+    # spoiler plugin
+    { 'type': 'block_spoiler', 'children': list[dict] }
+    { 'type': 'inline_spoiler', 'children': list[dict] }
