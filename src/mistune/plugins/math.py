@@ -1,4 +1,5 @@
 from typing import TYPE_CHECKING, Match
+from ..util import escape as escape_text
 
 if TYPE_CHECKING:
     from ..block_parser import BlockParser
@@ -25,11 +26,11 @@ def parse_inline_math(inline: "InlineParser", m: Match[str], state: "InlineState
 
 
 def render_block_math(renderer: "BaseRenderer", text: str) -> str:
-    return '<div class="math">$$\n' + text + "\n$$</div>\n"
+    return '<div class="math">$$\n' + escape_text(text) + "\n$$</div>\n"
 
 
 def render_inline_math(renderer: "BaseRenderer", text: str) -> str:
-    return r'<span class="math">\(' + text + r"\)</span>"
+    return r'<span class="math">\(' + escape_text(text) + r"\)</span>"
 
 
 def math(md: "Markdown") -> None:
