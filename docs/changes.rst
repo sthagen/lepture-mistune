@@ -3,6 +3,21 @@ Changelog
 
 Here is the full history of mistune v3.
 
+Version 3.2.1
+-------------
+
+**Released on May 3, 2026**
+
+* Escape link in ``render_toc_ul``.
+* Escape text in math plugin.
+* Fix regex for math plugin.
+* Escape heading's ID attribute.
+* Fix ``LINK_TITLE_RE`` to prevent DoS.
+* Escape class attribute for admonition directive.
+* Remove double-encoding of image alt text.
+* Escape class attribute for image directive.
+* Fix width/height attribute for image directive.
+
 Version 3.2.0
 -------------
 
