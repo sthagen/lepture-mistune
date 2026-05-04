@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 __all__ = ["Image", "Figure"]
 
-_num_re = re.compile(r"^\d+(?:\.\d*)?")
+_num_re = re.compile(r"^\d+(?:\.\d*)?(?:px|ch|em|rem|ex|rex|vw|vh|%)?$")
 _allowed_aligns = ["top", "middle", "bottom", "left", "center", "right"]
 
 
