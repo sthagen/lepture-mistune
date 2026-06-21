@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from mistune import create_markdown
+from mistune import BlockState, HTMLRenderer, create_markdown
 from mistune.renderers.rst import RSTRenderer
 from mistune.renderers.markdown import MarkdownRenderer
 from tests import BaseTestCase
@@ -65,3 +65,51 @@ class TestMarkdownRendererRoundTrip(TestCase):
             "ratio a/b is fine\n",
         ):
             self.assert_round_trip(text)
+
+
+class TestRendererMethodRegistration(TestCase):
+    def test_registered_renderer_method(self):
+        renderer = HTMLRenderer(escape=False)
+
+        def render_wiki(renderer, key, title):
+            return f'<a href="/wiki/{key}">{title}</a>'
+
+        renderer.register("wiki", render_wiki)
+        token = {"type": "wiki", "raw": "python", "attrs": {"title": "Python"}}
+
+        self.assertEqual(
+            renderer.render_token(token, BlockState()),
+            '<a href="/wiki/python">Python</a>',
+        )
+
+
+class TestMarkdownRendererPlugins(TestCase):
+    def test_task_list_item_can_be_overridden(self):
+        class MyRenderer(MarkdownRenderer):
+            def task_list_item(self, token, state):
+                return "TASK\n"
+
+        md = create_markdown(renderer=MyRenderer(), plugins=["task_lists"])
+        self.assertEqual(md("- [x] a task"), "TASK\n")
+
+    def test_task_list_item_default_markdown(self):
+        md = create_markdown(renderer=MarkdownRenderer(), plugins=["task_lists"])
+        self.assertEqual(md("- [x] a task"), "- [x] a task\n")
+
+    def test_table_markdown(self):
+        md = create_markdown(renderer=MarkdownRenderer(), plugins=["table"])
+        result = md("| A | B |\n|---|---|\n| 1 | 2 |\n")
+        self.assertEqual(result, "| A | B |\n| --- | --- |\n| 1 | 2 |\n")
+
+    def test_standalone_list_item(self):
+        renderer = MarkdownRenderer()
+        token = {
+            "type": "list_item",
+            "children": [
+                {
+                    "type": "paragraph",
+                    "children": [{"type": "text", "raw": "x"}],
+                }
+            ],
+        }
+        self.assertEqual(renderer.render_token(token, BlockState()), "- x\n\n")
