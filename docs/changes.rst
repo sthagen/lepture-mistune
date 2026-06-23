@@ -3,6 +3,22 @@ Changelog
 
 Here is the full history of mistune v3.
 
+Version 3.3.2
+-------------
+
+**Released on Jun 23, 2026**
+
+* Fix Python 3.8 import compatibility in the inline parser.
+* Fix mypy compatibility for list parsing on Python 3.8 and 3.9+.
+
+Version 3.3.1
+-------------
+
+**Released on Jun 22, 2026**
+
+* Fix ``abbr`` plugin compatibility with escaped inline text.
+* Normalize included Markdown line endings before parsing directives.
+
 Version 3.3.0
 -------------
 
