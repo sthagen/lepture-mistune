@@ -46,6 +46,30 @@ class TestMarkdownRendererRoundTrip(TestCase):
     def test_escaped_backtick(self):
         self.assert_round_trip(r"\`not code\`" + "\n")
 
+    def test_codespan_containing_backticks(self):
+        # the delimiter must grow past any backtick run inside the code span,
+        # and pad away a leading/trailing backtick, or the re-parse breaks
+        for text in (
+            "``a single ` backtick``\n",
+            "``` two `` backticks ```\n",
+            "`` `leading backtick``\n",
+            "``trailing backtick` ``\n",
+            "`` `surrounded` ``\n",
+        ):
+            self.assert_round_trip(text)
+
+    def test_link_title_containing_quote(self):
+        # a double quote inside a link/image title must be escaped, or the
+        # re-parse closes the title early and drops it
+        for text in (
+            "[t](/u 'say \"hi\"')\n",
+            '[t](/u "say \\"hi\\"")\n',
+            "![a](/u 'say \"hi\"')\n",
+            "[t][r]\n\n[r]: /u 'say \"hi\"'\n",
+            '[t](/u "back\\\\slash \\" quote")\n',
+        ):
+            self.assert_round_trip(text)
+
     def test_real_markers_preserved(self):
         for text in (
             "* bullet\n",
