@@ -46,6 +46,35 @@ class TestMarkdownRendererRoundTrip(TestCase):
     def test_escaped_backtick(self):
         self.assert_round_trip(r"\`not code\`" + "\n")
 
+    def test_escaped_emphasis_markers(self):
+        # an escaped "*"/"_" is a literal delimiter, not emphasis; re-emitting
+        # it unescaped would turn plain text back into <em>/<strong>
+        for text in (
+            r"\*not emphasis\*" + "\n",
+            r"\_not emphasis\_" + "\n",
+            r"\*\*not strong\*\*" + "\n",
+            r"\_\_not strong\_\_" + "\n",
+            r"a word\_with\_underscores" + "\n",
+            r"2 \* 3 \* 4" + "\n",
+            r"trailing star\*" + "\n",
+            r"\*leading star" + "\n",
+        ):
+            self.assert_round_trip(text)
+
+    def test_real_emphasis_not_over_escaped(self):
+        # genuine emphasis must survive untouched, and prose punctuation with
+        # spaces around a "*"/"_" must not gain stray backslashes
+        for text in (
+            "*emphasis*\n",
+            "**strong**\n",
+            "***both***\n",
+            "_under_ and __strong__\n",
+            "a *b* and _c_ mixed\n",
+            "2 * 3 = 6 and 4 * 5\n",
+            "snake_case_variable\n",
+        ):
+            self.assert_round_trip(text)
+
     def test_codespan_containing_backticks(self):
         # the delimiter must grow past any backtick run inside the code span,
         # and pad away a leading/trailing backtick, or the re-parse breaks
@@ -67,6 +96,19 @@ class TestMarkdownRendererRoundTrip(TestCase):
             "![a](/u 'say \"hi\"')\n",
             "[t][r]\n\n[r]: /u 'say \"hi\"'\n",
             '[t](/u "back\\\\slash \\" quote")\n',
+        ):
+            self.assert_round_trip(text)
+
+    def test_block_quote_content_ending_in_gt(self):
+        # a block quote whose content ends with ">" (an autolink, an inline
+        # HTML tag, or a literal ">") must keep that character; it was being
+        # stripped along with the trailing quote marker
+        for text in (
+            "> <https://example.com>\n",
+            "> <b>raw</b>\n",
+            "> ends with a literal &gt; >\n",
+            "> > nested <https://example.com>\n",
+            "> first\n>\n> <https://example.com>\n",
         ):
             self.assert_round_trip(text)
 

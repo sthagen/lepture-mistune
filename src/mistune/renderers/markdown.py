@@ -40,9 +40,18 @@ class MarkdownRenderer(BaseRenderer):
         return self.render_tokens(children, state)
 
     def text(self, token: Dict[str, Any], state: BlockState) -> str:
+        raw = cast(str, token["raw"])
+        # a text token that is made up entirely of "*"/"_" is a literal
+        # emphasis delimiter -- either an escaped marker from the source
+        # (``\*``) or an unmatched leftover -- so every character must stay
+        # escaped, or it would re-parse as emphasis on the round-trip. Prose
+        # punctuation such as ``2 * 3`` or ``snake_case`` arrives mixed with
+        # other characters and is left untouched.
+        if raw and all(c in "*_" for c in raw):
+            return "".join("\\" + c for c in raw)
         # a backtick always opens a code span, so it must stay escaped to
         # survive a re-parse as literal text.
-        return cast(str, token["raw"]).replace("`", "\\`")
+        return raw.replace("`", "\\`")
 
     def emphasis(self, token: Dict[str, Any], state: BlockState) -> str:
         return "*" + self.render_children(token, state) + "*"
@@ -131,8 +140,11 @@ class MarkdownRenderer(BaseRenderer):
         return marker2 + info + "\n" + code + marker2 + "\n\n"
 
     def block_quote(self, token: Dict[str, Any], state: BlockState) -> str:
-        text = indent(self.render_children(token, state), "> ", lambda _: True)
-        text = text.rstrip("> \n")
+        # strip the children's trailing blank lines first so the quote marker is
+        # not added to a dangling empty line; stripping it back off afterwards
+        # would also eat a ">" that ends the content (an autolink or HTML tag).
+        text = self.render_children(token, state).rstrip("\n")
+        text = indent(text, "> ", lambda _: True)
         return text + "\n\n"
 
     def block_html(self, token: Dict[str, Any], state: BlockState) -> str:

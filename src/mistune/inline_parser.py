@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from bisect import bisect_left
 from dataclasses import dataclass
 from typing import (
     Any,
@@ -27,6 +28,8 @@ from .util import escape_url, unikey
 
 _REGEX_META_CHARS = set(r"()[]{}?*+|.^$")
 _CHARREF_PREFIX = re.compile(r"(#[0-9]{1,7};|#[xX][0-9a-fA-F]+;|[^\t\n\f <&#;]{1,32};)")
+DEFAULT_MAX_EMPHASIS_DEPTH = 20
+DEFAULT_MAX_IMAGE_DEPTH = 20
 
 AUTO_EMAIL = (
     r"""<[a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9]"""
@@ -84,10 +87,17 @@ class InlineParser(Parser[InlineState]):
         "linebreak",
     )
 
-    def __init__(self, hard_wrap: bool = False) -> None:
+    def __init__(
+        self,
+        hard_wrap: bool = False,
+        max_emphasis_depth: int = DEFAULT_MAX_EMPHASIS_DEPTH,
+        max_image_depth: int = DEFAULT_MAX_IMAGE_DEPTH,
+    ) -> None:
         super(InlineParser, self).__init__()
 
         self.hard_wrap = hard_wrap
+        self.max_emphasis_depth = max_emphasis_depth
+        self.max_image_depth = max_image_depth
         self._fast_trigger_chars: Optional[Set[str]] = None
         self._fast_trigger_re: Optional[re.Pattern[str]] = None
         self._fast_trigger_re_chars: Optional[Tuple[str, ...]] = None
@@ -122,33 +132,47 @@ class InlineParser(Parser[InlineState]):
 
         marker = m.group(0)
         is_image = marker[0] == "!"
+        if is_image and self.max_image_depth > 0 and state.image_depth >= self.max_image_depth:
+            state.append_token({"type": "text", "raw": marker})
+            return pos
         if not is_image and state.in_link:
+            state.append_token({"type": "text", "raw": marker})
+            return pos
+        if not is_image and pos <= state.no_link_before:
             state.append_token({"type": "text", "raw": marker})
             return pos
 
         text = None
+        text_start = pos
+        text_end = pos
         label, end_pos = parse_link_label(state.src, pos)
         if label is None:
             if pos <= state.no_close_bracket_before:
                 state.append_token({"type": "text", "raw": marker})
                 return pos
-            text, end_pos = _parse_link_text(state, pos)
-            if text is None:
-                if end_pos > state.no_close_bracket_before:
-                    state.no_close_bracket_before = end_pos
+            close_pos = _find_closing_bracket(state, pos)
+            if close_pos is None:
+                if len(state.src) > state.no_close_bracket_before:
+                    state.no_close_bracket_before = len(state.src)
                 return None
+            text_start = pos
+            text_end = close_pos
+            end_pos = close_pos + 1
 
         assert end_pos is not None
 
-        if text is None:
+        if label is not None:
             text = label
+            text_start = pos
+            text_end = end_pos - 1
 
-        assert text is not None
+        body_end_pos = end_pos
 
-        if end_pos >= len(state.src) and label is None:
+        has_nested_link = not is_image and _label_contains_link(state, text_start, text_end)
+        if has_nested_link:
             return None
-
-        if not is_image and self._contains_nested_link(text, state):
+        if end_pos >= len(state.src) and label is None:
+            _mark_no_link_before(state, body_end_pos)
             return None
 
         rules = ["codespan", "prec_auto_link", "prec_inline_html"]
@@ -162,6 +186,8 @@ class InlineParser(Parser[InlineState]):
                 # standard link [text](<url> "title")
                 attrs, pos2 = parse_link(state.src, end_pos + 1)
                 if pos2:
+                    if text is None:
+                        text = state.src[text_start:text_end]
                     token = self.__parse_link_token(is_image, text, attrs, state)
                     state.append_token(token)
                     return pos2
@@ -175,45 +201,31 @@ class InlineParser(Parser[InlineState]):
                         label = label2
 
         if label is None:
-            return None
-
+            ref_links = state.env.get("ref_links")
+            if not ref_links:
+                _mark_no_link_before(state, body_end_pos)
+                return None
+            if text is None:
+                text = state.src[text_start:text_end]
+            label = text
         ref_links = state.env.get("ref_links")
         if not ref_links:
+            _mark_no_link_before(state, body_end_pos)
             return None
 
         key = unikey(label)
         env = ref_links.get(key)
         if env:
+            if text is None:
+                text = state.src[text_start:text_end]
             attrs = {"url": env["url"], "title": env.get("title")}
             token = self.__parse_link_token(is_image, text, attrs, state)
             token["ref"] = key
             token["label"] = label
             state.append_token(token)
             return end_pos
+        _mark_no_link_before(state, body_end_pos)
         return None
-
-    def _contains_nested_link(self, text: str, state: InlineState) -> bool:
-        if "[" not in text:
-            return False
-        if "](" not in text and "][" not in text and not state.env.get("ref_links"):
-            return False
-
-        sc = self.compile_sc(["link"])
-        nested_state = state.copy()
-        nested_state.src = text
-        pos = 0
-        while pos < len(text):
-            m = sc.search(text, pos)
-            if not m:
-                return False
-
-            marker = m.group(0)
-            if marker == "[" and (m.start() == 0 or text[m.start() - 1] != "!"):
-                if _is_link_like(text, m.end(), nested_state):
-                    return True
-            pos = m.start() + 1
-
-        return False
 
     def __parse_link_token(
         self,
@@ -226,6 +238,7 @@ class InlineParser(Parser[InlineState]):
         new_state.src = text
         if is_image:
             new_state.in_image = True
+            new_state.image_depth += 1
             token = {
                 "type": "image",
                 "children": self.render(new_state),
@@ -372,7 +385,11 @@ class InlineParser(Parser[InlineState]):
             self.process_text(state.src, state)
         elif pos < len(state.src):
             self.process_text(state.src[pos:], state)
-        state.tokens = _finalize_emphasis_tokens(state.tokens, "emphasis" in self.rules)
+        state.tokens = _finalize_emphasis_tokens(
+            state.tokens,
+            "emphasis" in self.rules,
+            self.max_emphasis_depth,
+        )
         return state.tokens
 
     def _find_fast_text_end(self, src: str, pos: int) -> Optional[int]:
@@ -534,7 +551,11 @@ class _Delimiter:
     orig_length: int = 0
 
 
-def _finalize_emphasis_tokens(tokens: List[Dict[str, Any]], enabled: bool) -> List[Dict[str, Any]]:
+def _finalize_emphasis_tokens(
+    tokens: List[Dict[str, Any]],
+    enabled: bool,
+    max_depth: int = DEFAULT_MAX_EMPHASIS_DEPTH,
+) -> List[Dict[str, Any]]:
     if not enabled:
         return _clean_emphasis_tokens(tokens)
     if not _contains_emphasis_marker(tokens):
@@ -551,7 +572,7 @@ def _finalize_emphasis_tokens(tokens: List[Dict[str, Any]], enabled: bool) -> Li
             parts.append(_clean_emphasis_token(token))
         source_pos += _emphasis_source_length(token)
 
-    _process_emphasis_delimiters(parts, delimiters)
+    _process_emphasis_delimiters(parts, delimiters, max_depth)
     return _merge_text_tokens(parts)
 
 
@@ -631,7 +652,11 @@ def _next_delimiter_run(text: str, pos: int) -> int:
     return pos
 
 
-def _process_emphasis_delimiters(parts: List[Dict[str, Any]], delimiters: List[_Delimiter]) -> None:
+def _process_emphasis_delimiters(
+    parts: List[Dict[str, Any]],
+    delimiters: List[_Delimiter],
+    max_depth: int,
+) -> None:
     closer_pos = 0
     openers_bottom: Dict[Tuple[str, int, bool], int] = {}
     while closer_pos < len(delimiters):
@@ -680,9 +705,12 @@ def _process_emphasis_delimiters(parts: List[Dict[str, Any]], delimiters: List[_
             closer_pos += 1
             continue
 
+        children = parts[opener.index + 1 : closer.index]
+        if max_depth > 0 and _emphasis_depth(children) >= max_depth:
+            closer_pos += 1
+            continue
         opener_text["raw"] = opener_text["raw"][:-use_length]
         closer_text["raw"] = closer_text["raw"][use_length:]
-        children = parts[opener.index + 1 : closer.index]
         if use_length == 2:
             node = {"type": "strong", "children": children}
         else:
@@ -711,6 +739,21 @@ def _process_emphasis_delimiters(parts: List[Dict[str, Any]], delimiters: List[_
             closer_pos = max(opener_pos, openers_bottom.get(opener_key, 0))
         else:
             closer_pos += 1
+
+
+def _emphasis_depth(tokens: List[Dict[str, Any]]) -> int:
+    max_depth = 0
+    stack = [(token, 0) for token in tokens]
+    while stack:
+        token, depth = stack.pop()
+        token_type = token["type"]
+        if token_type in ("emphasis", "strong"):
+            depth += 1
+            if depth > max_depth:
+                max_depth = depth
+        for child in token.get("children", ()):
+            stack.append((child, depth))
+    return max_depth
 
 
 def _has_strong_enabled(parts: List[Dict[str, Any]], opener: _Delimiter, closer: _Delimiter) -> bool:
@@ -798,51 +841,89 @@ def _merge_text_tokens(tokens: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return result
 
 
-def _parse_link_text(state: InlineState, pos: int) -> Tuple[Optional[str], int]:
-    close_pos = _find_closing_bracket(state, pos)
-    if close_pos is None:
-        return None, len(state.src)
-    return state.src[pos:close_pos], close_pos + 1
+def _mark_no_link_before(state: InlineState, end_pos: int) -> None:
+    if end_pos > state.no_link_before:
+        state.no_link_before = end_pos
 
 
 def _find_closing_bracket(state: InlineState, pos: int) -> Optional[int]:
+    return _get_closing_bracket_map(state).get(pos)
+
+
+def _label_contains_link(state: InlineState, start: int, end: int) -> bool:
+    if start >= end:
+        return False
+
+    starts, suffix_min_ends = _get_link_range_index(state)
+    index = bisect_left(starts, start)
+    return index < len(starts) and starts[index] < end and suffix_min_ends[index] <= end
+
+
+def _get_link_range_index(state: InlineState) -> Tuple[List[int], List[int]]:
+    cache = state.link_ranges.get(id(state.src))
+    if cache is not None and cache[0] is state.src:
+        return cache[1], cache[2]
+
+    pairs = _get_closing_bracket_map(state)
+    ranges: List[Tuple[int, int]] = []
+    for label_start, close_pos in pairs.items():
+        opener = label_start - 1
+        if opener > 0 and state.src[opener - 1] == "!":
+            continue
+        link_end = _find_link_range_end(state.src, label_start, close_pos, state)
+        if link_end is not None:
+            ranges.append((opener, link_end))
+
+    ranges.sort()
+    starts = [start for start, _end in ranges]
+    suffix_min_ends = [0] * len(ranges)
+    min_end = len(state.src) + 1
+    for index in range(len(ranges) - 1, -1, -1):
+        end = ranges[index][1]
+        if end < min_end:
+            min_end = end
+        suffix_min_ends[index] = min_end
+
+    state.link_ranges[id(state.src)] = (state.src, starts, suffix_min_ends)
+    return starts, suffix_min_ends
+
+
+def _get_closing_bracket_map(state: InlineState) -> Dict[int, int]:
     cache = state.link_brackets.get(id(state.src))
     if cache is not None and cache[0] is state.src:
-        return cache[1].get(pos)
+        return cache[1]
 
     pairs = _build_closing_bracket_map(state.src)
     state.link_brackets[id(state.src)] = (state.src, pairs)
-    return pairs.get(pos)
+    return pairs
 
 
-def _is_link_like(src: str, pos: int, state: InlineState) -> bool:
-    label, end_pos = parse_link_label(src, pos)
-    if label is None:
-        label, end_pos = _parse_link_text(state, pos)
-        if label is None:
-            return False
+def _find_link_range_end(src: str, label_start: int, close_pos: int, state: InlineState) -> Optional[int]:
+    end_pos = close_pos + 1
+    if end_pos < len(src):
+        marker = src[end_pos]
+        if marker == "(":
+            _attrs, new_pos = parse_link(src, end_pos + 1)
+            return new_pos
 
-    assert label is not None
-    assert end_pos is not None
+        if marker == "[":
+            label, new_pos = parse_link_label(src, end_pos + 1)
+            if not new_pos:
+                return None
+            if label:
+                ref_label = label
+            else:
+                ref_label = src[label_start:close_pos]
 
-    if end_pos >= len(src):
-        ref_links = state.env.get("ref_links")
-        return bool(ref_links and unikey(label) in ref_links)
-
-    marker = src[end_pos]
-    if marker == "(":
-        _attrs, new_pos = parse_link(src, end_pos + 1)
-        return bool(new_pos)
-
-    if marker == "[":
-        label2, new_pos = parse_link_label(src, end_pos + 1)
-        if not new_pos:
-            return False
-        if label2:
-            label = label2
+            ref_links = state.env.get("ref_links")
+            if ref_links and unikey(ref_label) in ref_links:
+                return new_pos
+            return None
 
     ref_links = state.env.get("ref_links")
-    return bool(ref_links and unikey(label) in ref_links)
+    if ref_links and unikey(src[label_start:close_pos]) in ref_links:
+        return end_pos
+    return None
 
 
 def _build_closing_bracket_map(src: str) -> Dict[int, int]:
