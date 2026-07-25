@@ -1,14 +1,7 @@
 import os
+
 from mistune import create_markdown
-from mistune.directives import (
-    RSTDirective,
-    FencedDirective,
-    Admonition,
-    TableOfContents,
-    Include,
-    Image,
-    Figure,
-)
+from mistune.directives import Admonition, FencedDirective, Figure, Image, Include, RSTDirective, TableOfContents
 from tests import BaseTestCase
 from tests.fixtures import ROOT
 
@@ -74,6 +67,29 @@ class TestCustomizeToc(BaseTestCase):
         html = md("# h1\n\n:::{toc}\n:::\n")
         self.assertIn('<h1 id="t-1">h1</h1>', html)
         self.assertIn('<a href="#t-1">h1</a>', html)
+
+
+class TestFencedDirectiveInList(BaseTestCase):
+    md = create_markdown(  # type: ignore[list-item]
+        escape=False,
+        plugins=[FencedDirective([Admonition()], markers=":")],
+    )
+
+    def test_marker_run_below_fence_length_is_not_a_directive(self):
+        # A directive needs three or more markers, inside a list item as well
+        # as outside one. The list break rules are recompiled per item, and a
+        # marker run shorter than the fence must stay literal text.
+        for text in (":{note}\nlazy\n", "100. item\n:{note}\nlazy\n"):
+            self.assertNotIn("admonition", self.md(text))
+
+        html = self.md("- item\n:{note}\nlazy\n")
+        self.assertNotIn("admonition", html)
+        self.assertIn(":{note}", html)
+
+    def test_directive_still_breaks_a_list(self):
+        html = self.md("- item\n:::{note}\nbody\n:::\n")
+        self.assertIn('<section class="admonition note">', html)
+        self.assertIn("<p>body</p>", html)
 
 
 class TestDirectiveInclude(BaseTestCase):

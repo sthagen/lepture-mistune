@@ -1,8 +1,8 @@
 from unittest import TestCase
 
 from mistune import BlockState, HTMLRenderer, create_markdown
-from mistune.renderers.rst import RSTRenderer
 from mistune.renderers.markdown import MarkdownRenderer
+from mistune.renderers.rst import RSTRenderer
 from tests import BaseTestCase
 
 
@@ -109,6 +109,18 @@ class TestMarkdownRendererRoundTrip(TestCase):
             "> ends with a literal &gt; >\n",
             "> > nested <https://example.com>\n",
             "> first\n>\n> <https://example.com>\n",
+        ):
+            self.assert_round_trip(text)
+
+    def test_multiline_setext_heading(self):
+        # a setext heading may span several lines; re-emitting it as an ATX
+        # heading ("# ...") drops every line after the first out of the
+        # heading, because an ATX heading is a single line
+        for text in (
+            "Foo\nBar\n===\n",
+            "Foo\nBar\n---\n",
+            "one\ntwo\nthree\n===\n",
+            "Foo *bar\nbaz*\n====\n",
         ):
             self.assert_round_trip(text)
 

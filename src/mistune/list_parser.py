@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Iterable, Optional, Match, Pattern, cast
+from typing import TYPE_CHECKING, Any, Iterable, Match, Optional, Pattern, cast
+
 from .util import strip_end
 
 if TYPE_CHECKING:
@@ -233,8 +234,11 @@ def _build_list_item_source(text: str, src: str, continue_width: int) -> str:
 def _compile_list_break_sc(block: "BlockParser", leading_width: int) -> Pattern[str]:
     pairs = [(name, block.specification[name]) for name in _get_list_break_rules(block)]
     if leading_width < 3:
-        _repl_w = str(leading_width)
-        pairs = [(n, p.replace("3", _repl_w, 1)) for n, p in pairs]
+        # Relax the leading indent bound only. Matching on a bare "3" would
+        # rewrite the first quantifier of any rule that has no indent prefix --
+        # e.g. a fenced directive's "{3,}" marker run.
+        _repl = " {0,%d}" % leading_width
+        pairs = [(n, p.replace(" {0,3}", _repl, 1)) for n, p in pairs]
 
     regex = "|".join(r"(?P<%s>(?<=\n)%s)" % pair for pair in pairs)
     return re.compile(regex, re.M)

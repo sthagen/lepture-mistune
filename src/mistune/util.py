@@ -1,9 +1,10 @@
+import html
 import re
-from html import _replace_charref  # type: ignore[attr-defined]
-from typing import Match
+from typing import Callable, Match, cast
 from urllib.parse import quote
 
 _expand_tab_re = re.compile(r"^( {0,3})\t", flags=re.M)
+_replace_charref = cast(Callable[[Match[str]], str], getattr(html, "_replace_charref"))
 
 
 def expand_leading_tab(text: str, width: int = 4) -> str:
@@ -77,8 +78,20 @@ def striptags(s: str) -> str:
     return _striptags_re.sub("", s)
 
 
-_strip_end_re = re.compile(r"\n\s+$")
-
-
 def strip_end(src: str) -> str:
-    return _strip_end_re.sub("\n", src)
+    r"""Strip trailing whitespace after the final line break.
+
+    This used to be implemented as ``re.sub(r"\n\s+$", "\n", src)``.
+    For a long run of blank lines followed by a non-whitespace continuation,
+    the regex retries ``\s+`` from every preceding newline and becomes
+    quadratic.  Scanning the suffix once keeps the same behavior in linear
+    time.
+    """
+    end = len(src)
+    while end and src[end - 1].isspace():
+        end -= 1
+
+    newline = src.find("\n", end)
+    if newline >= 0:
+        return src[:newline] + "\n"
+    return src

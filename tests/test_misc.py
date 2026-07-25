@@ -1,5 +1,6 @@
-import mistune
 from unittest import TestCase
+
+import mistune
 
 
 class TestMiscCases(TestCase):
@@ -91,6 +92,19 @@ class TestMiscCases(TestCase):
         expected = '<p><a href="#harmful-link">h</a></p>'
         self.assertEqual(result.strip(), expected)
 
+    def test_backslash_space_in_link_destination_is_not_an_escape(self):
+        # A space is not ASCII punctuation, so "\ " is a literal backslash and a
+        # space that ends the bare destination: the link fails to parse and is
+        # rendered as text (as CommonMark and other parsers do). Previously the
+        # scanner treated "\ " as an escape and swallowed the space into the URL,
+        # producing an illegal href containing %5C%20.
+        result = mistune.html(r"[a](foo\ bar)")
+        self.assertEqual(result.strip(), r"<p>[a](foo\ bar)</p>")
+
+        # An escaped punctuation character is still consumed as an escape.
+        result = mistune.html(r"[a](foo\*bar)")
+        self.assertEqual(result.strip(), '<p><a href="foo*bar">a</a></p>')
+
     def test_harmful_links_variants(self):
         # entity-decoded, alternate-scheme, and reference-link forms are all
         # routed to the #harmful-link sentinel.
@@ -133,6 +147,14 @@ class TestMiscCases(TestCase):
         }
         for text, html in cases.items():
             self.assertEqual(mistune.html(text).strip(), html)
+
+    def test_angle_link_escaped_backslash(self):
+        cases = {
+            r"[link](<foo\*bar>)": '<p><a href="foo*bar">link</a></p>',
+            "[x]: <a\\*b>\n\n[x]": '<p><a href="a*b">x</a></p>',
+        }
+        for text, html in cases.items():
+            self.assertEqual(mistune.html(text).strip(), html, text)
 
     def test_allow_harmful_protocols(self):
         renderer = mistune.HTMLRenderer(allow_harmful_protocols=True)
