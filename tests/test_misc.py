@@ -17,6 +17,20 @@ class TestMiscCases(TestCase):
         md.parse("", state)
         self.assertEqual(state.env["name"], "test")
 
+    def test_escape_applies_to_custom_renderer(self):
+        class CustomRenderer(mistune.HTMLRenderer):
+            pass
+
+        md = mistune.create_markdown(renderer=CustomRenderer(), escape=False)
+        self.assertEqual(md("<b>hi</b>").strip(), "<p><b>hi</b></p>")
+
+        md = mistune.create_markdown(renderer=CustomRenderer(escape=False), escape=True)
+        self.assertEqual(md("<b>hi</b>").strip(), "<p>&lt;b&gt;hi&lt;/b&gt;</p>")
+
+        # without an explicit escape flag the renderer keeps its own setting
+        md = mistune.create_markdown(renderer=CustomRenderer(escape=False))
+        self.assertEqual(md("<b>hi</b>").strip(), "<p><b>hi</b></p>")
+
     def test_hard_wrap(self):
         md = mistune.create_markdown(escape=False, hard_wrap=True)
         result = md("foo\nbar")
